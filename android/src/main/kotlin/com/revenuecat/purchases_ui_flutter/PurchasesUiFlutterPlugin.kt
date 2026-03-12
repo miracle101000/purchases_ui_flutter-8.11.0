@@ -3,7 +3,6 @@ package com.revenuecat.purchases_ui_flutter
 import android.app.Activity
 import android.content.Intent
 import android.util.Log
-import com.revenuecat.purchases.PurchasesErrorCode
 import com.revenuecat.purchases.hybridcommon.ui.PaywallResultListener
 import com.revenuecat.purchases.hybridcommon.ui.PaywallSource
 import com.revenuecat.purchases.hybridcommon.ui.PresentPaywallOptions
@@ -21,13 +20,13 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import io.flutter.plugin.common.PluginRegistry
 
-class PurchasesUiFlutterPlugin: FlutterPlugin, MethodCallHandler, ActivityAware,
-    PluginRegistry.ActivityResultListener {
+class PurchasesUiFlutterPlugin :
+        FlutterPlugin, MethodCallHandler, ActivityAware, PluginRegistry.ActivityResultListener {
     private val TAG = "PurchasesUIFlutter"
 
     private var activity: Activity? = null
 
-    private lateinit var channel : MethodChannel
+    private lateinit var channel: MethodChannel
 
     private var pendingResult: Result? = null
 
@@ -37,12 +36,12 @@ class PurchasesUiFlutterPlugin: FlutterPlugin, MethodCallHandler, ActivityAware,
 
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
         flutterPluginBinding.platformViewRegistry.registerViewFactory(
-            "com.revenuecat.purchasesui/PaywallView",
-            PaywallViewFactory(flutterPluginBinding.binaryMessenger)
+                "com.revenuecat.purchasesui/PaywallView",
+                PaywallViewFactory(flutterPluginBinding.binaryMessenger) { activity }
         )
         flutterPluginBinding.platformViewRegistry.registerViewFactory(
-            "com.revenuecat.purchasesui/PaywallFooterView",
-            PaywallFooterViewFactory(flutterPluginBinding.binaryMessenger)
+                "com.revenuecat.purchasesui/PaywallFooterView",
+                PaywallFooterViewFactory(flutterPluginBinding.binaryMessenger) { activity }
         )
         channel = MethodChannel(flutterPluginBinding.binaryMessenger, "purchases_ui_flutter")
         channel.setMethodCallHandler(this)
@@ -50,26 +49,29 @@ class PurchasesUiFlutterPlugin: FlutterPlugin, MethodCallHandler, ActivityAware,
 
     override fun onMethodCall(call: MethodCall, result: Result) {
         when (call.method) {
-            "presentPaywall" -> presentPaywall(
-                result = result,
-                requiredEntitlementIdentifier = null,
-                offeringIdentifier = call.argument("offeringIdentifier"),
-                displayCloseButton = call.argument("displayCloseButton"),
-            )
+            "presentPaywall" ->
+                    presentPaywall(
+                            result = result,
+                            requiredEntitlementIdentifier = null,
+                            offeringIdentifier = call.argument("offeringIdentifier"),
+                            displayCloseButton = call.argument("displayCloseButton"),
+                    )
             "presentPaywallIfNeeded" -> {
-                val requiredEntitlementIdentifier: String? = call.argument("requiredEntitlementIdentifier")
+                val requiredEntitlementIdentifier: String? =
+                        call.argument("requiredEntitlementIdentifier")
                 val offeringIdentifier: String? = call.argument("offeringIdentifier")
                 val displayCloseButton: Boolean? = call.argument("displayCloseButton")
                 presentPaywall(
-                    result = result,
-                    requiredEntitlementIdentifier = requiredEntitlementIdentifier,
-                    offeringIdentifier = offeringIdentifier,
-                    displayCloseButton = displayCloseButton,
+                        result = result,
+                        requiredEntitlementIdentifier = requiredEntitlementIdentifier,
+                        offeringIdentifier = offeringIdentifier,
+                        displayCloseButton = displayCloseButton,
                 )
             }
-            "presentCustomerCenter" -> presentCustomerCenter(
-                result = result,
-            )
+            "presentCustomerCenter" ->
+                    presentCustomerCenter(
+                            result = result,
+                    )
             else -> {
                 result.notImplemented()
             }
@@ -98,54 +100,56 @@ class PurchasesUiFlutterPlugin: FlutterPlugin, MethodCallHandler, ActivityAware,
     }
 
     private fun presentPaywall(
-        result: Result,
-        requiredEntitlementIdentifier: String?,
-        offeringIdentifier: String?,
-        displayCloseButton: Boolean?
+            result: Result,
+            requiredEntitlementIdentifier: String?,
+            offeringIdentifier: String?,
+            displayCloseButton: Boolean?
     ) {
         val activity = getActivityFragment()
         if (activity != null) {
-           presentPaywallFromFragment(
-               activity,
-               PresentPaywallOptions(
-                   paywallSource = offeringIdentifier?.let { PaywallSource.OfferingIdentifier(it) }
-                       ?: PaywallSource.DefaultOffering,
-                   requiredEntitlementIdentifier = requiredEntitlementIdentifier,
-                   shouldDisplayDismissButton = displayCloseButton,
-                   paywallResultListener = object : PaywallResultListener {
-                       override fun onPaywallResult(paywallResult: String) {
-                           result.success(paywallResult)
-                       }
-                   }
-               )
-           )
+            presentPaywallFromFragment(
+                    activity,
+                    PresentPaywallOptions(
+                            paywallSource =
+                                    offeringIdentifier?.let { PaywallSource.OfferingIdentifier(it) }
+                                            ?: PaywallSource.DefaultOffering,
+                            requiredEntitlementIdentifier = requiredEntitlementIdentifier,
+                            shouldDisplayDismissButton = displayCloseButton,
+                            paywallResultListener =
+                                    object : PaywallResultListener {
+                                        override fun onPaywallResult(paywallResult: String) {
+                                            result.success(paywallResult)
+                                        }
+                                    }
+                    )
+            )
         } else {
             result.error(
-                "PAYWALLS_MISSING_WRONG_ACTIVITY",
-                "Make sure your MainActivity inherits from FlutterFragmentActivity",
-                null
+                    "PAYWALLS_MISSING_WRONG_ACTIVITY",
+                    "Make sure your MainActivity inherits from FlutterFragmentActivity",
+                    null
             )
         }
     }
 
     private fun presentCustomerCenter(
-        result: Result,
+            result: Result,
     ) {
         activity?.let {
             pendingResult = result
             presentCustomerCenterFromActivity(it)
-        } ?: run {
-            result.error(
-                "CUSTOMER_CENTER_MISSING_ACTIVITY",
-                "Could not present Customer Center. There's no activity",
-                null
-            )
         }
+                ?: run {
+                    result.error(
+                            "CUSTOMER_CENTER_MISSING_ACTIVITY",
+                            "Could not present Customer Center. There's no activity",
+                            null
+                    )
+                }
     }
 
     private fun presentCustomerCenterFromActivity(activity: Activity) {
-        val intent = ShowCustomerCenter()
-            .createIntent(activity, Unit)
+        val intent = ShowCustomerCenter().createIntent(activity, Unit)
         activity.startActivityForResult(intent, REQUEST_CODE_CUSTOMER_CENTER)
     }
 
@@ -154,10 +158,7 @@ class PurchasesUiFlutterPlugin: FlutterPlugin, MethodCallHandler, ActivityAware,
         return if (activity is FlutterFragmentActivity) {
             activity
         } else {
-            Log.e(
-                TAG,
-                "Paywalls require your activity to subclass FlutterFragmentActivity"
-            )
+            Log.e(TAG, "Paywalls require your activity to subclass FlutterFragmentActivity")
             null
         }
     }
@@ -170,9 +171,9 @@ class PurchasesUiFlutterPlugin: FlutterPlugin, MethodCallHandler, ActivityAware,
             } else {
                 Log.d(TAG, "Customer Center closed with result code: $resultCode")
                 pendingResult?.error(
-                    "CUSTOMER_CENTER_ERROR",
-                    "Customer Center closed with result code: $resultCode",
-                    null
+                        "CUSTOMER_CENTER_ERROR",
+                        "Customer Center closed with result code: $resultCode",
+                        null
                 )
             }
             pendingResult = null
@@ -180,5 +181,4 @@ class PurchasesUiFlutterPlugin: FlutterPlugin, MethodCallHandler, ActivityAware,
         }
         return false
     }
-
 }

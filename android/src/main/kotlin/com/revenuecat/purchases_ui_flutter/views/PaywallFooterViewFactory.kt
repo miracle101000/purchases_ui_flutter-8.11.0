@@ -7,11 +7,16 @@ import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
 
 internal class PaywallFooterViewFactory(
-    private val messenger: BinaryMessenger,
+        private val messenger: BinaryMessenger,
+        private val activity: () -> Activity?,
 ) : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
     override fun create(context: Context, viewId: Int, args: Any?): PlatformView {
-        @Suppress("UNCHECKED_CAST")
-        val creationParams = args as? Map<String?, Any?>? ?: emptyMap()
-        return PaywallFooterView(context, viewId, messenger, creationParams)
+        @Suppress("UNCHECKED_CAST") val creationParams = args as? Map<String?, Any?>? ?: emptyMap()
+        return PaywallFooterView(
+                context = activity() ?: context,
+                id = viewId,
+                messenger = messenger,
+                creationParams = creationParams,
+        )
     }
 }
