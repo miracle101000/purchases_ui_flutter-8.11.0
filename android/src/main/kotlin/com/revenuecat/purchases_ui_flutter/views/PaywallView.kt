@@ -36,24 +36,27 @@ internal class PaywallView(
         val displayCloseButton = creationParams["displayCloseButton"] as Boolean?
         val theme = creationParams["theme"] as String? // "light" | "dark" | null
 
-        // Use activity context as the base so startActivity() works
-        val activityContext = context as? Activity ?: context
+        val activity = context as? Activity ?: error("PaywallView requires an Activity context")
 
-        val themedContext =
+        val themedContext: Context =
                 if (theme != null) {
                     val nightMode =
-                            when (theme) {
-                                "dark" -> Configuration.UI_MODE_NIGHT_YES
-                                else -> Configuration.UI_MODE_NIGHT_NO
-                            }
+                            if (theme == "dark") Configuration.UI_MODE_NIGHT_YES
+                            else Configuration.UI_MODE_NIGHT_NO
                     val config =
-                            Configuration(activityContext.resources.configuration).also {
+                            Configuration(activity.resources.configuration).also {
                                 it.uiMode =
                                         (it.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
                                                 nightMode
                             }
-                    activityContext.createConfigurationContext(config)
-                } else activityContext
+                    // Wrap with config but restore Activity startActivity behaviour
+                    ActivityAwareContextWrapper(
+                            activity.createConfigurationContext(config),
+                            activity
+                    )
+                } else {
+                    activity
+                }
 
         nativePaywallView =
                 NativePaywallView(
