@@ -12,6 +12,16 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.platform.PlatformView
 
+private class ActivityAwareContextWrapper(base: Context, private val activity: Activity) :
+        ContextWrapper(base) {
+    override fun startActivity(intent: Intent) {
+        activity.startActivity(intent)
+    }
+    override fun startActivity(intent: Intent, options: Bundle?) {
+        activity.startActivity(intent, options)
+    }
+}
+
 internal class PaywallView(
         context: Context,
         id: Int,
