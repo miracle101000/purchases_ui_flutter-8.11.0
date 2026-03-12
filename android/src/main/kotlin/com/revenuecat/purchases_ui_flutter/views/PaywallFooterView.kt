@@ -2,7 +2,7 @@ package com.revenuecat.purchases_ui_flutter.views
 
 import android.app.Activity
 import android.content.Context
-import android.content.res.Configuration
+import android.os.Build
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
@@ -35,29 +35,10 @@ internal class PaywallFooterView(
         val activity =
                 context as? Activity ?: error("PaywallFooterView requires an Activity context")
 
-        val themedContext: Context =
-                if (theme != null) {
-                    val nightMode =
-                            if (theme == "dark") Configuration.UI_MODE_NIGHT_YES
-                            else Configuration.UI_MODE_NIGHT_NO
-                    val config =
-                            Configuration(activity.resources.configuration).also {
-                                it.uiMode =
-                                        (it.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
-                                                nightMode
-                            }
-                    ActivityAwareContextWrapper(
-                            activity.createConfigurationContext(config),
-                            activity
-                    )
-                } else {
-                    activity
-                }
-
         nativePaywallFooterView =
                 object :
                         NativePaywallFooterView(
-                                themedContext,
+                                activity,
                                 dismissHandler = { methodChannel.invokeMethod("onDismiss", null) }
                         ) {
                     public override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -75,6 +56,10 @@ internal class PaywallFooterView(
                         updateHeight(finalHeight.toDouble())
                     }
                 }
+
+        if (theme != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            nativePaywallFooterView.overrideUserInterfaceStyle = if (theme == "dark") 2 else 1
+        }
 
         nativePaywallFooterView.setPaywallListener(
                 object : PaywallListenerWrapper() {

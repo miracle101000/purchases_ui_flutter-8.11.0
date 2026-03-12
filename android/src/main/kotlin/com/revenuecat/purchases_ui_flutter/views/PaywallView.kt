@@ -2,7 +2,7 @@ package com.revenuecat.purchases_ui_flutter.views
 
 import android.app.Activity
 import android.content.Context
-import android.content.res.Configuration
+import android.os.Build
 import android.view.View
 import com.revenuecat.purchases.hybridcommon.ui.PaywallListenerWrapper
 import com.revenuecat.purchases.ui.revenuecatui.views.PaywallView as NativePaywallView
@@ -35,32 +35,16 @@ internal class PaywallView(
 
         val activity = context as? Activity ?: error("PaywallView requires an Activity context")
 
-        val themedContext: Context =
-                if (theme != null) {
-                    val nightMode =
-                            if (theme == "dark") Configuration.UI_MODE_NIGHT_YES
-                            else Configuration.UI_MODE_NIGHT_NO
-                    val config =
-                            Configuration(activity.resources.configuration).also {
-                                it.uiMode =
-                                        (it.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
-                                                nightMode
-                            }
-                    // Wrap with config but restore Activity startActivity behaviour
-                    ActivityAwareContextWrapper(
-                            activity.createConfigurationContext(config),
-                            activity
-                    )
-                } else {
-                    activity
-                }
-
         nativePaywallView =
                 NativePaywallView(
-                        context = themedContext,
+                        context = activity,
                         shouldDisplayDismissButton = displayCloseButton,
                         dismissHandler = { methodChannel.invokeMethod("onDismiss", null) }
                 )
+
+        if (theme != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            nativePaywallView.overrideUserInterfaceStyle = if (theme == "dark") 2 else 1
+        }
 
         nativePaywallView.setPaywallListener(
                 object : PaywallListenerWrapper() {
