@@ -1,8 +1,9 @@
-package com.revenuecat.purchases_ui_flutter.views
-
 import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
 import android.content.res.Configuration
+import android.os.Bundle
 import android.view.View
 import com.revenuecat.purchases.hybridcommon.ui.PaywallListenerWrapper
 import com.revenuecat.purchases.ui.revenuecatui.views.PaywallView as NativePaywallView
@@ -12,6 +13,7 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.platform.PlatformView
 
+// Keeps Activity identity so startActivity() works inside a config-wrapped context
 private class ActivityAwareContextWrapper(base: Context, private val activity: Activity) :
         ContextWrapper(base) {
     override fun startActivity(intent: Intent) {
@@ -32,10 +34,7 @@ internal class PaywallView(
     private val methodChannel: MethodChannel
     private val nativePaywallView: NativePaywallView
 
-    override fun getView(): View {
-        return nativePaywallView
-    }
-
+    override fun getView(): View = nativePaywallView
     override fun dispose() {}
 
     init {
@@ -44,7 +43,7 @@ internal class PaywallView(
 
         val offeringIdentifier = creationParams["offeringIdentifier"] as String?
         val displayCloseButton = creationParams["displayCloseButton"] as Boolean?
-        val theme = creationParams["theme"] as String? // "light" | "dark" | null
+        val theme = creationParams["theme"] as String?
 
         val activity = context as? Activity ?: error("PaywallView requires an Activity context")
 
@@ -80,7 +79,6 @@ internal class PaywallView(
                     override fun onPurchaseStarted(rcPackage: Map<String, Any?>) {
                         methodChannel.invokeMethod("onPurchaseStarted", rcPackage)
                     }
-
                     override fun onPurchaseCompleted(
                             customerInfo: Map<String, Any?>,
                             storeTransaction: Map<String, Any?>
@@ -93,19 +91,15 @@ internal class PaywallView(
                                 )
                         )
                     }
-
                     override fun onPurchaseCancelled() {
                         methodChannel.invokeMethod("onPurchaseCancelled", null)
                     }
-
                     override fun onPurchaseError(error: Map<String, Any?>) {
                         methodChannel.invokeMethod("onPurchaseError", error)
                     }
-
                     override fun onRestoreCompleted(customerInfo: Map<String, Any?>) {
                         methodChannel.invokeMethod("onRestoreCompleted", customerInfo)
                     }
-
                     override fun onRestoreError(error: Map<String, Any?>) {
                         methodChannel.invokeMethod("onRestoreError", error)
                     }
@@ -115,8 +109,6 @@ internal class PaywallView(
         nativePaywallView.setOfferingId(offeringIdentifier)
     }
 
-    // We currently don't have any communication in this channel from dart to native, so this can be
-    // empty.
     override fun onMethodCall(methodCall: MethodCall, result: MethodChannel.Result) {
         when (methodCall.method) {
             else -> result.notImplemented()
