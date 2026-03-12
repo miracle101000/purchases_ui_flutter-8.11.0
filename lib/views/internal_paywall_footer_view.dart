@@ -23,6 +23,7 @@ class InternalPaywallFooterView extends StatelessWidget {
   final Function(CustomerInfo customerInfo)? onRestoreCompleted;
   final Function(PurchasesError)? onRestoreError;
   final Function()? onDismiss;
+
   final Function(double) onHeightChanged;
 
   const InternalPaywallFooterView({
@@ -38,7 +39,8 @@ class InternalPaywallFooterView extends StatelessWidget {
     required this.onHeightChanged,
   }) : super(key: key);
 
-  static const String _viewType = 'com.revenuecat.purchasesui/PaywallFooterView';
+  static const String _viewType =
+      'com.revenuecat.purchasesui/PaywallFooterView';
 
   @override
   Widget build(BuildContext context) {
@@ -60,16 +62,16 @@ class InternalPaywallFooterView extends StatelessWidget {
   );
 
   PlatformViewLink _buildAndroidPlatformViewLink(
-      Map<String, dynamic> creationParams,
-      ) =>
-      PlatformViewLink(
-        viewType: _viewType,
-        surfaceFactory: (context, controller) => AndroidViewSurface(
-          controller: controller as AndroidViewController,
-          gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{},
-          hitTestBehavior: PlatformViewHitTestBehavior.opaque,
-        ),
-        onCreatePlatformView: (params) => PlatformViewsService.initSurfaceAndroidView(
+    Map<String, dynamic> creationParams,
+  ) => PlatformViewLink(
+    viewType: _viewType,
+    surfaceFactory: (context, controller) => AndroidViewSurface(
+      controller: controller as AndroidViewController,
+      gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{},
+      hitTestBehavior: PlatformViewHitTestBehavior.opaque,
+    ),
+    onCreatePlatformView: (params) =>
+        PlatformViewsService.initSurfaceAndroidView(
             id: params.id,
             viewType: _viewType,
             layoutDirection: TextDirection.ltr,
@@ -79,10 +81,10 @@ class InternalPaywallFooterView extends StatelessWidget {
               params.onFocusChanged(true);
             },
           )
-            ..addOnPlatformViewCreatedListener(params.onPlatformViewCreated)
-            ..addOnPlatformViewCreatedListener(_buildListenerChannel)
-            ..create(),
-      );
+          ..addOnPlatformViewCreatedListener(params.onPlatformViewCreated)
+          ..addOnPlatformViewCreatedListener(_buildListenerChannel)
+          ..create(),
+  );
 
   void _buildListenerChannel(int id) {
     final handler = PaywallViewMethodHandler(
@@ -94,8 +96,9 @@ class InternalPaywallFooterView extends StatelessWidget {
       onRestoreError,
       onDismiss,
     );
-    MethodChannel('com.revenuecat.purchasesui/PaywallFooterView/$id')
-        .setMethodCallHandler((call) async {
+    MethodChannel(
+      'com.revenuecat.purchasesui/PaywallFooterView/$id',
+    ).setMethodCallHandler((call) async {
       if (call.method == 'onHeightChanged') {
         onHeightChanged(call.arguments as double);
       } else {

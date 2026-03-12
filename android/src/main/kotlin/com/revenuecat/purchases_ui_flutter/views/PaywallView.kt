@@ -30,72 +30,72 @@ internal class PaywallView(
     init {
         methodChannel = MethodChannel(messenger, "com.revenuecat.purchasesui/PaywallView/$id")
         methodChannel.setMethodCallHandler(this)
+
         val offeringIdentifier = creationParams["offeringIdentifier"] as String?
         val displayCloseButton = creationParams["displayCloseButton"] as Boolean?
         val theme = creationParams["theme"] as String? // "light" | "dark" | null
 
         val themedContext = if (theme != null) {
-        val nightMode = when (theme) {
-            "dark" -> Configuration.UI_MODE_NIGHT_YES
-            else   -> Configuration.UI_MODE_NIGHT_NO
-        }
-        val config = Configuration(context.resources.configuration).also {
-            it.uiMode = (it.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or nightMode
-        }
-        context.createConfigurationContext(config)
+            val nightMode = when (theme) {
+                "dark" -> Configuration.UI_MODE_NIGHT_YES
+                else   -> Configuration.UI_MODE_NIGHT_NO
+            }
+            val config = Configuration(context.resources.configuration).also {
+                it.uiMode = (it.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or nightMode
+            }
+            context.createConfigurationContext(config)
         } else context
 
-        nativePaywallView =
-                NativePaywallView(
-                        context = themedContext,    
-                        shouldDisplayDismissButton = displayCloseButton,
-                        dismissHandler = { methodChannel.invokeMethod("onDismiss", null) }
-                )
-        nativePaywallView.setPaywallListener(
-                object : PaywallListenerWrapper() {
-                    override fun onPurchaseStarted(rcPackage: Map<String, Any?>) {
-                        methodChannel.invokeMethod("onPurchaseStarted", rcPackage)
-                    }
-
-                    override fun onPurchaseCompleted(
-                            customerInfo: Map<String, Any?>,
-                            storeTransaction: Map<String, Any?>
-                    ) {
-                        methodChannel.invokeMethod(
-                                "onPurchaseCompleted",
-                                mapOf(
-                                        "customerInfo" to customerInfo,
-                                        "storeTransaction" to storeTransaction
-                                )
-                        )
-                    }
-
-                    override fun onPurchaseCancelled() {
-                        methodChannel.invokeMethod("onPurchaseCancelled", null)
-                    }
-
-                    override fun onPurchaseError(error: Map<String, Any?>) {
-                        methodChannel.invokeMethod("onPurchaseError", error)
-                    }
-
-                    override fun onRestoreCompleted(customerInfo: Map<String, Any?>) {
-                        methodChannel.invokeMethod("onRestoreCompleted", customerInfo)
-                    }
-
-                    override fun onRestoreError(error: Map<String, Any?>) {
-                        methodChannel.invokeMethod("onRestoreError", error)
-                    }
-                }
+        nativePaywallView = NativePaywallView(
+                context = themedContext,
+                shouldDisplayDismissButton = displayCloseButton,
+                dismissHandler = { methodChannel.invokeMethod("onDismiss", null) }
         )
+
+        nativePaywallView.setPaywallListener(
+            object : PaywallListenerWrapper() {
+                override fun onPurchaseStarted(rcPackage: Map<String, Any?>) {
+                    methodChannel.invokeMethod("onPurchaseStarted", rcPackage)
+                }
+
+                override fun onPurchaseCompleted(
+                        customerInfo: Map<String, Any?>,
+                        storeTransaction: Map<String, Any?>
+                ) {
+                    methodChannel.invokeMethod(
+                        "onPurchaseCompleted",
+                        mapOf(
+                            "customerInfo" to customerInfo,
+                            "storeTransaction" to storeTransaction
+                        )
+                    )
+                }
+
+                override fun onPurchaseCancelled() {
+                    methodChannel.invokeMethod("onPurchaseCancelled", null)
+                }
+
+                override fun onPurchaseError(error: Map<String, Any?>) {
+                    methodChannel.invokeMethod("onPurchaseError", error)
+                }
+
+                override fun onRestoreCompleted(customerInfo: Map<String, Any?>) {
+                    methodChannel.invokeMethod("onRestoreCompleted", customerInfo)
+                }
+
+                override fun onRestoreError(error: Map<String, Any?>) {
+                    methodChannel.invokeMethod("onRestoreError", error)
+                }
+            }
+        )
+
         nativePaywallView.setOfferingId(offeringIdentifier)
     }
 
-    // We currently don't have any communication in this channel from dart to native, so this can be
-    // empty.
+    // We currently don't have any communication in this channel from dart to native, so this can be empty.
     override fun onMethodCall(methodCall: MethodCall, result: MethodChannel.Result) {
         when (methodCall.method) {
             else -> result.notImplemented()
         }
     }
-}
 }
