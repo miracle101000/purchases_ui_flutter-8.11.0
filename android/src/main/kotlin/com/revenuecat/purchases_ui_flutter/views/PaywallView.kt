@@ -1,5 +1,6 @@
 package com.revenuecat.purchases_ui_flutter.views
 
+import android.app.Activity
 import android.content.Context
 import android.content.res.Configuration
 import android.view.View
