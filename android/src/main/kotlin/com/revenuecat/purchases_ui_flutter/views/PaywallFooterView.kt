@@ -2,10 +2,7 @@ package com.revenuecat.purchases_ui_flutter.views
 
 import android.app.Activity
 import android.content.Context
-import android.content.ContextWrapper
-import android.content.Intent
 import android.content.res.Configuration
-import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
@@ -15,16 +12,6 @@ import com.revenuecat.purchases.ui.revenuecatui.views.PaywallFooterView as Nativ
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.platform.PlatformView
-
-private class ActivityAwareContextWrapper(base: Context, private val activity: Activity) :
-        ContextWrapper(base) {
-    override fun startActivity(intent: Intent) {
-        activity.startActivity(intent)
-    }
-    override fun startActivity(intent: Intent, options: Bundle?) {
-        activity.startActivity(intent, options)
-    }
-}
 
 internal class PaywallFooterView(
         context: Context,
