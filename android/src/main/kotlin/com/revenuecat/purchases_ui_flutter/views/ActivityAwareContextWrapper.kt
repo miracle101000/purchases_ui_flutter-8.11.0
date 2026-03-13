@@ -13,4 +13,14 @@ internal class ActivityContextWrapper(
     override fun getResources(): Resources = themedContext.resources
     override fun getTheme(): Resources.Theme = themedContext.theme
     override fun getAssets(): AssetManager = themedContext.assets
+
+    override fun getSystemService(name: String): Any? {
+        // Critical: Native views use the LayoutInflater to resolve resources.
+        // If we don't proxy this, they use the Activity's default inflater.
+        return if (Context.LAYOUT_INFLATER_SERVICE == name) {
+            LayoutInflater.from(themedContext)
+        } else {
+            super.getSystemService(name)
+        }
+    }
 }

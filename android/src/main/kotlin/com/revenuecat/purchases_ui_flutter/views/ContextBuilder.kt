@@ -21,8 +21,9 @@ internal fun buildFinalContext(
 ): Context {
     val resolvedLocale: Locale =
             if (!locale.isNullOrBlank()) {
-                val parsed = Locale.forLanguageTag(locale)
-                // forLanguageTag returns an empty Locale for unrecognised tags
+                val normalizedTag = locale.replace("_", "-")
+                val parsed = Locale.forLanguageTag(normalizedTag)
+
                 if (parsed.language.isNotEmpty()) parsed else Locale.ENGLISH
             } else {
                 Locale.ENGLISH
