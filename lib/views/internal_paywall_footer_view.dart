@@ -15,6 +15,12 @@ import 'paywall_view_method_handler.dart';
 
 class InternalPaywallFooterView extends StatelessWidget {
   final Offering? offering;
+
+  /// Resolved BCP-47 locale tag to forward to the native view.
+  /// The parent widget is responsible for resolving the locale before passing
+  /// it here (falling back to the ambient locale when the caller supplies null).
+  final String locale;
+
   final Function(Package rcPackage)? onPurchaseStarted;
   final Function(CustomerInfo customerInfo, StoreTransaction storeTransaction)?
   onPurchaseCompleted;
@@ -29,6 +35,7 @@ class InternalPaywallFooterView extends StatelessWidget {
   const InternalPaywallFooterView({
     Key? key,
     this.offering,
+    required this.locale,
     this.onPurchaseStarted,
     this.onPurchaseCompleted,
     this.onPurchaseCancelled,
@@ -46,6 +53,7 @@ class InternalPaywallFooterView extends StatelessWidget {
   Widget build(BuildContext context) {
     final creationParams = <String, dynamic>{
       'offeringIdentifier': offering?.identifier,
+      'locale': locale,
     };
 
     return Platform.isAndroid

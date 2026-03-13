@@ -15,6 +15,10 @@ import 'internal_paywall_footer_view.dart';
 /// [offering] (Optional) The offering object to be displayed in the paywall.
 /// Obtained from [Purchases.getOfferings].
 ///
+/// [locale] (Optional) Override the locale used by the native paywall. If not
+/// provided, the locale from the current [BuildContext] is used. Falls back to
+/// English on Android if the tag is unrecognised.
+///
 /// [onPurchaseStarted] (Optional) Callback that gets called when a purchase
 /// is started.
 ///
@@ -43,8 +47,10 @@ class PaywallFooterView extends OriginalTemplatePaywallFooterView {
   const PaywallFooterView({
     Key? key,
     Offering? offering,
+    Locale? locale,
     Function(Package rcPackage)? onPurchaseStarted,
-    Function(CustomerInfo customerInfo, StoreTransaction storeTransaction)? onPurchaseCompleted,
+    Function(CustomerInfo customerInfo, StoreTransaction storeTransaction)?
+    onPurchaseCompleted,
     Function()? onPurchaseCancelled,
     Function(PurchasesError)? onPurchaseError,
     Function(CustomerInfo customerInfo)? onRestoreCompleted,
@@ -52,17 +58,18 @@ class PaywallFooterView extends OriginalTemplatePaywallFooterView {
     Function()? onDismiss,
     required Widget Function(double bottomPadding) contentCreator,
   }) : super(
-      key: key,
-      offering: offering,
-      onPurchaseStarted: onPurchaseStarted,
-      onPurchaseCompleted: onPurchaseCompleted,
-      onPurchaseCancelled: onPurchaseCancelled,
-      onPurchaseError: onPurchaseError,
-      onRestoreCompleted: onRestoreCompleted,
-      onRestoreError: onRestoreError,
-      onDismiss: onDismiss,
-      contentCreator: contentCreator,
-  );
+         key: key,
+         offering: offering,
+         locale: locale,
+         onPurchaseStarted: onPurchaseStarted,
+         onPurchaseCompleted: onPurchaseCompleted,
+         onPurchaseCancelled: onPurchaseCancelled,
+         onPurchaseError: onPurchaseError,
+         onRestoreCompleted: onRestoreCompleted,
+         onRestoreError: onRestoreError,
+         onDismiss: onDismiss,
+         contentCreator: contentCreator,
+       );
 }
 
 /// View that displays the paywall in footer mode.
@@ -70,6 +77,10 @@ class PaywallFooterView extends OriginalTemplatePaywallFooterView {
 ///
 /// [offering] (Optional) The offering object to be displayed in the paywall.
 /// Obtained from [Purchases.getOfferings].
+///
+/// [locale] (Optional) Override the locale used by the native paywall. If not
+/// provided, the locale from the current [BuildContext] is used. Falls back to
+/// English on Android if the tag is unrecognised.
 ///
 /// [onPurchaseStarted] (Optional) Callback that gets called when a purchase
 /// is started.
@@ -94,8 +105,12 @@ class PaywallFooterView extends OriginalTemplatePaywallFooterView {
 /// the paywall. Make sure you apply the given padding to the bottom of your
 /// content to avoid overlap.
 class OriginalTemplatePaywallFooterView extends StatefulWidget {
-
   final Offering? offering;
+
+  /// BCP-47 locale tag (e.g. "fr", "es-MX") to forward to the native paywall.
+  /// When null, the ambient [Locale] from [BuildContext] is used automatically.
+  final Locale? locale;
+
   final Function(Package rcPackage)? onPurchaseStarted;
   final Function(CustomerInfo customerInfo, StoreTransaction storeTransaction)?
   onPurchaseCompleted;
@@ -109,6 +124,7 @@ class OriginalTemplatePaywallFooterView extends StatefulWidget {
   const OriginalTemplatePaywallFooterView({
     Key? key,
     this.offering,
+    this.locale,
     this.onPurchaseStarted,
     this.onPurchaseCompleted,
     this.onPurchaseCancelled,
@@ -137,37 +153,44 @@ class _PaywallFooterViewState extends State<OriginalTemplatePaywallFooterView> {
   }
 
   @override
-  Widget build(BuildContext context) => Stack(
-    children: [
-      Positioned(
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: _height - _roundedCornerRadius,
-        child: widget.contentCreator(_roundedCornerRadius),
-      ),
-      Positioned(
-        bottom: 0,
-        left: 0,
-        right: 0,
-        child: SizedBox(
-          width: double.infinity,
-          height: _height,
-          child: InternalPaywallFooterView(
-            offering: widget.offering,
-            onPurchaseStarted: widget.onPurchaseStarted,
-            onPurchaseCompleted: widget.onPurchaseCompleted,
-            onPurchaseCancelled: widget.onPurchaseCancelled,
-            onPurchaseError: widget.onPurchaseError,
-            onRestoreCompleted: widget.onRestoreCompleted,
-            onRestoreError: widget.onRestoreError,
-            onDismiss: widget.onDismiss,
-            onHeightChanged: _updateHeight,
+  Widget build(BuildContext context) {
+    // Prefer explicitly supplied locale; fall back to the ambient locale.
+    final resolvedLocale = (widget.locale ?? Localizations.localeOf(context))
+        .toLanguageTag();
+
+    return Stack(
+      children: [
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: _height - _roundedCornerRadius,
+          child: widget.contentCreator(_roundedCornerRadius),
+        ),
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: SizedBox(
+            width: double.infinity,
+            height: _height,
+            child: InternalPaywallFooterView(
+              offering: widget.offering,
+              locale: resolvedLocale,
+              onPurchaseStarted: widget.onPurchaseStarted,
+              onPurchaseCompleted: widget.onPurchaseCompleted,
+              onPurchaseCancelled: widget.onPurchaseCancelled,
+              onPurchaseError: widget.onPurchaseError,
+              onRestoreCompleted: widget.onRestoreCompleted,
+              onRestoreError: widget.onRestoreError,
+              onDismiss: widget.onDismiss,
+              onHeightChanged: _updateHeight,
+            ),
           ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 
   void _updateHeight(double newHeight) {
     // In android we get pixels but in iOS we get pixel independent units.

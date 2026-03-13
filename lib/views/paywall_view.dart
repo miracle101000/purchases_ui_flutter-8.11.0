@@ -23,6 +23,12 @@ import 'paywall_view_method_handler.dart';
 /// paywall. Only available for original template paywalls.
 /// Ignored for V2 Paywalls. Defaults to false.
 ///
+/// [brightness] (Optional) Override the brightness (theme) of the paywall.
+///
+/// [locale] (Optional) Override the locale used by the native paywall. If not
+/// provided, the locale from the current [BuildContext] is used. Falls back to
+/// English on Android if the tag is unrecognised.
+///
 /// [onPurchaseStarted] (Optional) Callback that gets called when a purchase
 /// is started.
 ///
@@ -49,6 +55,11 @@ class PaywallView extends StatelessWidget {
   final Offering? offering;
   final bool? displayCloseButton;
   final Brightness? brightness;
+
+  /// BCP-47 locale tag (e.g. "fr", "es-MX") to forward to the native paywall.
+  /// When null, the ambient [Locale] from [BuildContext] is used automatically.
+  final Locale? locale;
+
   final Function(Package rcPackage)? onPurchaseStarted;
   final Function(CustomerInfo customerInfo, StoreTransaction storeTransaction)?
   onPurchaseCompleted;
@@ -70,16 +81,21 @@ class PaywallView extends StatelessWidget {
     this.onRestoreError,
     this.onDismiss,
     this.brightness,
+    this.locale,
   }) : super(key: key);
 
   static const String _viewType = 'com.revenuecat.purchasesui/PaywallView';
 
   @override
   Widget build(BuildContext context) {
+    // Prefer explicitly supplied locale; fall back to the ambient locale.
+    final resolvedLocale = locale ?? Localizations.localeOf(context);
+
     final creationParams = <String, dynamic>{
       'offeringIdentifier': offering?.identifier,
       'displayCloseButton': displayCloseButton,
       'theme': brightness == Brightness.dark ? 'dark' : 'light',
+      'locale': resolvedLocale.toLanguageTag(),
     };
 
     return Platform.isAndroid
