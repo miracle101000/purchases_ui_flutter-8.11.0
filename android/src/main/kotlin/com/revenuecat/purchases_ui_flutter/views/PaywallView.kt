@@ -2,7 +2,7 @@ package com.revenuecat.purchases_ui_flutter.views
 
 import android.app.Activity
 import android.content.Context
-import android.os.Build
+import android.content.res.Configuration
 import android.view.View
 import com.revenuecat.purchases.hybridcommon.ui.PaywallListenerWrapper
 import com.revenuecat.purchases.ui.revenuecatui.views.PaywallView as NativePaywallView
@@ -35,16 +35,28 @@ internal class PaywallView(
 
         val activity = context as? Activity ?: error("PaywallView requires an Activity context")
 
+        val finalContext: Context =
+                if (theme != null) {
+                    val nightMode =
+                            if (theme == "dark") Configuration.UI_MODE_NIGHT_YES
+                            else Configuration.UI_MODE_NIGHT_NO
+                    val config =
+                            Configuration(activity.resources.configuration).apply {
+                                uiMode =
+                                        (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+                                                nightMode
+                            }
+                    ActivityContextWrapper(activity, activity.createConfigurationContext(config))
+                } else {
+                    activity
+                }
+
         nativePaywallView =
                 NativePaywallView(
-                        context = activity,
+                        context = finalContext,
                         shouldDisplayDismissButton = displayCloseButton,
                         dismissHandler = { methodChannel.invokeMethod("onDismiss", null) }
                 )
-
-        if (theme != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            nativePaywallView.overrideUserInterfaceStyle = if (theme == "dark") 2 else 1
-        }
 
         nativePaywallView.setPaywallListener(
                 object : PaywallListenerWrapper() {
