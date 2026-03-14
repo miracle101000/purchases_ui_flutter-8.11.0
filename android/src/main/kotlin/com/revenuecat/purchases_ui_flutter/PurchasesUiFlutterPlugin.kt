@@ -35,6 +35,7 @@ class PurchasesUiFlutterPlugin :
     }
 
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
+        Log.d(TAG, "onAttachedToEngine: registering platform view factories")
         flutterPluginBinding.platformViewRegistry.registerViewFactory(
                 "com.revenuecat.purchasesui/PaywallView",
                 PaywallViewFactory(flutterPluginBinding.binaryMessenger) { activity }
@@ -45,9 +46,11 @@ class PurchasesUiFlutterPlugin :
         )
         channel = MethodChannel(flutterPluginBinding.binaryMessenger, "purchases_ui_flutter")
         channel.setMethodCallHandler(this)
+        Log.d(TAG, "onAttachedToEngine: setup complete")
     }
 
     override fun onMethodCall(call: MethodCall, result: Result) {
+        Log.d(TAG, "onMethodCall: method=${call.method}")
         when (call.method) {
             "presentPaywall" ->
                     presentPaywall(
@@ -79,23 +82,31 @@ class PurchasesUiFlutterPlugin :
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        Log.d(TAG, "onDetachedFromEngine")
         channel.setMethodCallHandler(null)
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+        Log.d(TAG, "onAttachedToActivity: activity=${binding.activity::class.simpleName}")
         activity = binding.activity
         binding.addActivityResultListener(this)
     }
 
     override fun onDetachedFromActivityForConfigChanges() {
+        Log.d(TAG, "onDetachedFromActivityForConfigChanges")
         onDetachedFromActivity()
     }
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+        Log.d(
+                TAG,
+                "onReattachedToActivityForConfigChanges: activity=${binding.activity::class.simpleName}"
+        )
         onAttachedToActivity(binding)
     }
 
     override fun onDetachedFromActivity() {
+        Log.d(TAG, "onDetachedFromActivity")
         activity = null
     }
 
@@ -105,8 +116,13 @@ class PurchasesUiFlutterPlugin :
             offeringIdentifier: String?,
             displayCloseButton: Boolean?
     ) {
+        Log.d(
+                TAG,
+                "presentPaywall — offeringIdentifier=$offeringIdentifier, requiredEntitlementIdentifier=$requiredEntitlementIdentifier, displayCloseButton=$displayCloseButton"
+        )
         val activity = getActivityFragment()
         if (activity != null) {
+            Log.d(TAG, "presentPaywall: launching paywall from fragment activity")
             presentPaywallFromFragment(
                     activity,
                     PresentPaywallOptions(
@@ -118,12 +134,14 @@ class PurchasesUiFlutterPlugin :
                             paywallResultListener =
                                     object : PaywallResultListener {
                                         override fun onPaywallResult(paywallResult: String) {
+                                            Log.d(TAG, "onPaywallResult: $paywallResult")
                                             result.success(paywallResult)
                                         }
                                     }
                     )
             )
         } else {
+            Log.e(TAG, "presentPaywall failed: activity is not a FlutterFragmentActivity")
             result.error(
                     "PAYWALLS_MISSING_WRONG_ACTIVITY",
                     "Make sure your MainActivity inherits from FlutterFragmentActivity",
@@ -135,11 +153,14 @@ class PurchasesUiFlutterPlugin :
     private fun presentCustomerCenter(
             result: Result,
     ) {
+        Log.d(TAG, "presentCustomerCenter called")
         activity?.let {
+            Log.d(TAG, "presentCustomerCenter: starting activity")
             pendingResult = result
             presentCustomerCenterFromActivity(it)
         }
                 ?: run {
+                    Log.e(TAG, "presentCustomerCenter failed: no activity available")
                     result.error(
                             "CUSTOMER_CENTER_MISSING_ACTIVITY",
                             "Could not present Customer Center. There's no activity",
