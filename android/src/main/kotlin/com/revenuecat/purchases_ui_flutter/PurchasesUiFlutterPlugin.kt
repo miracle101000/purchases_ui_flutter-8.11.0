@@ -4,13 +4,10 @@ import android.app.Activity
 import android.content.Intent
 import android.util.Log
 import com.revenuecat.purchases.Purchases
-import com.revenuecat.purchases.PurchasesError
 import com.revenuecat.purchases.hybridcommon.ui.PaywallResultListener
 import com.revenuecat.purchases.hybridcommon.ui.PaywallSource
 import com.revenuecat.purchases.hybridcommon.ui.PresentPaywallOptions
 import com.revenuecat.purchases.hybridcommon.ui.presentPaywallFromFragment
-import com.revenuecat.purchases.interfaces.ReceiveOfferingsCallback
-import com.revenuecat.purchases.models.Offerings
 import com.revenuecat.purchases.ui.revenuecatui.customercenter.ShowCustomerCenter
 import com.revenuecat.purchases_ui_flutter.views.PaywallFooterViewFactory
 import com.revenuecat.purchases_ui_flutter.views.PaywallViewFactory
@@ -152,92 +149,76 @@ class PurchasesUiFlutterPlugin :
         }
 
         Log.d(TAG, "presentPaywall: fetching fresh offerings before presenting")
-        Purchases.sharedInstance.getOfferings(
-                object : ReceiveOfferingsCallback {
-                    override fun onReceived(offerings: Offerings) {
-                        Log.d(TAG, "presentPaywall: getOfferings success, presenting paywall")
-                        val paywallSource =
-                                if (offeringIdentifier != null) {
-                                    val offering = offerings.getOffering(offeringIdentifier)
-                                    if (offering != null) {
-                                        Log.d(
-                                                TAG,
-                                                "presentPaywall: using offering '$offeringIdentifier'"
-                                        )
-                                        PaywallSource.Offering(offering)
-                                    } else {
+        Purchases.sharedInstance.getOfferingsWith(
+                onError = { error ->
+                    // Fetch failed — still present using cached data.
+                    Log.e(
+                            TAG,
+                            "presentPaywall: getOfferings error: ${error.message} — presenting anyway"
+                    )
+                    presentPaywallFromFragment(
+                            activity,
+                            PresentPaywallOptions(
+                                    paywallSource =
+                                            offeringIdentifier?.let {
+                                                PaywallSource.OfferingIdentifier(it)
+                                            }
+                                                    ?: PaywallSource.DefaultOffering,
+                                    requiredEntitlementIdentifier = requiredEntitlementIdentifier,
+                                    shouldDisplayDismissButton = displayCloseButton,
+                                    paywallResultListener =
+                                            object : PaywallResultListener {
+                                                override fun onPaywallResult(
+                                                        paywallResult: String
+                                                ) {
+                                                    Log.d(TAG, "onPaywallResult: $paywallResult")
+                                                    Locale.setDefault(originalLocale)
+                                                    result.success(paywallResult)
+                                                }
+                                            }
+                            )
+                    )
+                },
+                onSuccess = { offerings ->
+                    Log.d(TAG, "presentPaywall: getOfferings success, presenting paywall")
+                    val resolvedId =
+                            if (offeringIdentifier != null) {
+                                val found = offerings.all[offeringIdentifier]
+                                if (found == null)
                                         Log.w(
                                                 TAG,
                                                 "presentPaywall: offering '$offeringIdentifier' not found, using default"
                                         )
-                                        PaywallSource.DefaultOffering
-                                    }
-                                } else {
-                                    PaywallSource.DefaultOffering
-                                }
-
-                        presentPaywallFromFragment(
-                                activity,
-                                PresentPaywallOptions(
-                                        paywallSource = paywallSource,
-                                        requiredEntitlementIdentifier =
-                                                requiredEntitlementIdentifier,
-                                        shouldDisplayDismissButton = displayCloseButton,
-                                        paywallResultListener =
-                                                object : PaywallResultListener {
-                                                    override fun onPaywallResult(
-                                                            paywallResult: String
-                                                    ) {
-                                                        Log.d(
-                                                                TAG,
-                                                                "onPaywallResult: $paywallResult"
-                                                        )
-                                                        Locale.setDefault(originalLocale)
-                                                        Log.d(
-                                                                TAG,
-                                                                "presentPaywall: Locale.setDefault restored → $originalLocale"
-                                                        )
-                                                        result.success(paywallResult)
-                                                    }
+                                found?.identifier
+                                        ?: offerings.current?.identifier ?: offeringIdentifier
+                            } else {
+                                offerings.current?.identifier
+                            }
+                    Log.d(TAG, "presentPaywall: resolved offeringId=$resolvedId")
+                    presentPaywallFromFragment(
+                            activity,
+                            PresentPaywallOptions(
+                                    paywallSource =
+                                            resolvedId?.let { PaywallSource.OfferingIdentifier(it) }
+                                                    ?: PaywallSource.DefaultOffering,
+                                    requiredEntitlementIdentifier = requiredEntitlementIdentifier,
+                                    shouldDisplayDismissButton = displayCloseButton,
+                                    paywallResultListener =
+                                            object : PaywallResultListener {
+                                                override fun onPaywallResult(
+                                                        paywallResult: String
+                                                ) {
+                                                    Log.d(TAG, "onPaywallResult: $paywallResult")
+                                                    Locale.setDefault(originalLocale)
+                                                    Log.d(
+                                                            TAG,
+                                                            "presentPaywall: Locale.setDefault restored → $originalLocale"
+                                                    )
+                                                    result.success(paywallResult)
                                                 }
-                                )
-                        )
-                    }
-
-                    override fun onError(error: PurchasesError) {
-                        // Offerings fetch failed — still present the paywall, it will use cached
-                        // data.
-                        Log.e(
-                                TAG,
-                                "presentPaywall: getOfferings error: ${error.message} — presenting anyway"
-                        )
-                        presentPaywallFromFragment(
-                                activity,
-                                PresentPaywallOptions(
-                                        paywallSource =
-                                                offeringIdentifier?.let {
-                                                    PaywallSource.OfferingIdentifier(it)
-                                                }
-                                                        ?: PaywallSource.DefaultOffering,
-                                        requiredEntitlementIdentifier =
-                                                requiredEntitlementIdentifier,
-                                        shouldDisplayDismissButton = displayCloseButton,
-                                        paywallResultListener =
-                                                object : PaywallResultListener {
-                                                    override fun onPaywallResult(
-                                                            paywallResult: String
-                                                    ) {
-                                                        Log.d(
-                                                                TAG,
-                                                                "onPaywallResult: $paywallResult"
-                                                        )
-                                                        Locale.setDefault(originalLocale)
-                                                        result.success(paywallResult)
-                                                    }
-                                                }
-                                )
-                        )
-                    }
+                                            }
+                            )
+                    )
                 }
         )
     }
