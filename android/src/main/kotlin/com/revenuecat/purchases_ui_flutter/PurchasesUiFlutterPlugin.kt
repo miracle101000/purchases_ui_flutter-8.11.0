@@ -3,10 +3,14 @@ package com.revenuecat.purchases_ui_flutter
 import android.app.Activity
 import android.content.Intent
 import android.util.Log
+import com.revenuecat.purchases.Purchases
+import com.revenuecat.purchases.PurchasesError
 import com.revenuecat.purchases.hybridcommon.ui.PaywallResultListener
 import com.revenuecat.purchases.hybridcommon.ui.PaywallSource
 import com.revenuecat.purchases.hybridcommon.ui.PresentPaywallOptions
 import com.revenuecat.purchases.hybridcommon.ui.presentPaywallFromFragment
+import com.revenuecat.purchases.interfaces.ReceiveOfferingsCallback
+import com.revenuecat.purchases.models.Offerings
 import com.revenuecat.purchases.ui.revenuecatui.customercenter.ShowCustomerCenter
 import com.revenuecat.purchases_ui_flutter.views.PaywallFooterViewFactory
 import com.revenuecat.purchases_ui_flutter.views.PaywallViewFactory
@@ -19,6 +23,7 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import io.flutter.plugin.common.PluginRegistry
+import java.util.Locale
 
 class PurchasesUiFlutterPlugin :
         FlutterPlugin, MethodCallHandler, ActivityAware, PluginRegistry.ActivityResultListener {
@@ -58,17 +63,20 @@ class PurchasesUiFlutterPlugin :
                             requiredEntitlementIdentifier = null,
                             offeringIdentifier = call.argument("offeringIdentifier"),
                             displayCloseButton = call.argument("displayCloseButton"),
+                            locale = call.argument("locale"),
                     )
             "presentPaywallIfNeeded" -> {
                 val requiredEntitlementIdentifier: String? =
                         call.argument("requiredEntitlementIdentifier")
                 val offeringIdentifier: String? = call.argument("offeringIdentifier")
                 val displayCloseButton: Boolean? = call.argument("displayCloseButton")
+                val locale: String? = call.argument("locale")
                 presentPaywall(
                         result = result,
                         requiredEntitlementIdentifier = requiredEntitlementIdentifier,
                         offeringIdentifier = offeringIdentifier,
                         displayCloseButton = displayCloseButton,
+                        locale = locale,
                 )
             }
             "presentCustomerCenter" ->
@@ -114,40 +122,124 @@ class PurchasesUiFlutterPlugin :
             result: Result,
             requiredEntitlementIdentifier: String?,
             offeringIdentifier: String?,
-            displayCloseButton: Boolean?
+            displayCloseButton: Boolean?,
+            locale: String?,
     ) {
         Log.d(
                 TAG,
-                "presentPaywall — offeringIdentifier=$offeringIdentifier, requiredEntitlementIdentifier=$requiredEntitlementIdentifier, displayCloseButton=$displayCloseButton"
+                "presentPaywall — offeringIdentifier=$offeringIdentifier, requiredEntitlementIdentifier=$requiredEntitlementIdentifier, displayCloseButton=$displayCloseButton, locale=$locale"
         )
+
         val activity = getActivityFragment()
-        if (activity != null) {
-            Log.d(TAG, "presentPaywall: launching paywall from fragment activity")
-            presentPaywallFromFragment(
-                    activity,
-                    PresentPaywallOptions(
-                            paywallSource =
-                                    offeringIdentifier?.let { PaywallSource.OfferingIdentifier(it) }
-                                            ?: PaywallSource.DefaultOffering,
-                            requiredEntitlementIdentifier = requiredEntitlementIdentifier,
-                            shouldDisplayDismissButton = displayCloseButton,
-                            paywallResultListener =
-                                    object : PaywallResultListener {
-                                        override fun onPaywallResult(paywallResult: String) {
-                                            Log.d(TAG, "onPaywallResult: $paywallResult")
-                                            result.success(paywallResult)
-                                        }
-                                    }
-                    )
-            )
-        } else {
+        if (activity == null) {
             Log.e(TAG, "presentPaywall failed: activity is not a FlutterFragmentActivity")
             result.error(
                     "PAYWALLS_MISSING_WRONG_ACTIVITY",
                     "Make sure your MainActivity inherits from FlutterFragmentActivity",
                     null
             )
+            return
         }
+
+        // Apply locale override so the SDK's getOfferings request is made with the correct locale.
+        val originalLocale = Locale.getDefault()
+        if (!locale.isNullOrBlank()) {
+            val parsed = Locale.forLanguageTag(locale.replace("_", "-"))
+            if (parsed.language.isNotEmpty()) {
+                Locale.setDefault(parsed)
+                Log.d(TAG, "presentPaywall: Locale.setDefault → $parsed (was $originalLocale)")
+            }
+        }
+
+        Log.d(TAG, "presentPaywall: fetching fresh offerings before presenting")
+        Purchases.sharedInstance.getOfferings(
+                object : ReceiveOfferingsCallback {
+                    override fun onReceived(offerings: Offerings) {
+                        Log.d(TAG, "presentPaywall: getOfferings success, presenting paywall")
+                        val paywallSource =
+                                if (offeringIdentifier != null) {
+                                    val offering = offerings.getOffering(offeringIdentifier)
+                                    if (offering != null) {
+                                        Log.d(
+                                                TAG,
+                                                "presentPaywall: using offering '$offeringIdentifier'"
+                                        )
+                                        PaywallSource.Offering(offering)
+                                    } else {
+                                        Log.w(
+                                                TAG,
+                                                "presentPaywall: offering '$offeringIdentifier' not found, using default"
+                                        )
+                                        PaywallSource.DefaultOffering
+                                    }
+                                } else {
+                                    PaywallSource.DefaultOffering
+                                }
+
+                        presentPaywallFromFragment(
+                                activity,
+                                PresentPaywallOptions(
+                                        paywallSource = paywallSource,
+                                        requiredEntitlementIdentifier =
+                                                requiredEntitlementIdentifier,
+                                        shouldDisplayDismissButton = displayCloseButton,
+                                        paywallResultListener =
+                                                object : PaywallResultListener {
+                                                    override fun onPaywallResult(
+                                                            paywallResult: String
+                                                    ) {
+                                                        Log.d(
+                                                                TAG,
+                                                                "onPaywallResult: $paywallResult"
+                                                        )
+                                                        Locale.setDefault(originalLocale)
+                                                        Log.d(
+                                                                TAG,
+                                                                "presentPaywall: Locale.setDefault restored → $originalLocale"
+                                                        )
+                                                        result.success(paywallResult)
+                                                    }
+                                                }
+                                )
+                        )
+                    }
+
+                    override fun onError(error: PurchasesError) {
+                        // Offerings fetch failed — still present the paywall, it will use cached
+                        // data.
+                        Log.e(
+                                TAG,
+                                "presentPaywall: getOfferings error: ${error.message} — presenting anyway"
+                        )
+                        presentPaywallFromFragment(
+                                activity,
+                                PresentPaywallOptions(
+                                        paywallSource =
+                                                offeringIdentifier?.let {
+                                                    PaywallSource.OfferingIdentifier(it)
+                                                }
+                                                        ?: PaywallSource.DefaultOffering,
+                                        requiredEntitlementIdentifier =
+                                                requiredEntitlementIdentifier,
+                                        shouldDisplayDismissButton = displayCloseButton,
+                                        paywallResultListener =
+                                                object : PaywallResultListener {
+                                                    override fun onPaywallResult(
+                                                            paywallResult: String
+                                                    ) {
+                                                        Log.d(
+                                                                TAG,
+                                                                "onPaywallResult: $paywallResult"
+                                                        )
+                                                        Locale.setDefault(originalLocale)
+                                                        result.success(paywallResult)
+                                                    }
+                                                }
+                                )
+                        )
+                    }
+                }
+        )
     }
 
     private fun presentCustomerCenter(

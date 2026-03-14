@@ -16,17 +16,21 @@ internal class PaywallViewFactory(
 ) : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
     override fun create(context: Context, viewId: Int, args: Any?): PlatformView {
         @Suppress("UNCHECKED_CAST") val creationParams = args as? Map<String?, Any?>? ?: emptyMap()
-        val resolvedActivity = activity()
-        if (resolvedActivity == null) {
-            Log.w(TAG, "create(viewId=$viewId): activity is null, falling back to context")
-        } else {
-            Log.d(
-                    TAG,
-                    "create(viewId=$viewId): using activity=${resolvedActivity::class.simpleName}"
-            )
-        }
+        val resolvedActivity =
+                activity()
+                        ?: run {
+                            Log.e(
+                                    TAG,
+                                    "create(viewId=$viewId): activity is null — cannot create PaywallView"
+                            )
+                            error(
+                                    "PaywallViewFactory requires an Activity context, but none is currently attached. " +
+                                            "Ensure MainActivity inherits from FlutterFragmentActivity."
+                            )
+                        }
+        Log.d(TAG, "create(viewId=$viewId): using activity=${resolvedActivity::class.simpleName}")
         return PaywallView(
-                context = resolvedActivity ?: context,
+                context = resolvedActivity,
                 id = viewId,
                 messenger = messenger,
                 creationParams = creationParams,
