@@ -92,11 +92,16 @@ internal fun buildFinalContext(
     // Snapshot the original config so we can restore it on dispose.
     val originalConfig = Configuration(activity.resources.configuration)
     val displayMetrics = activity.resources.displayMetrics
+    val originalDefaultLocale = Locale.getDefault()
 
     // Prime the shared AssetManager for the target locale. The restore is intentionally
     // deferred to dispose() — see the KDoc above for the full explanation.
     Log.d(TAG, "Priming AssetManager for locale=$resolvedLocale (restore deferred to dispose)")
     @Suppress("DEPRECATION") activity.resources.updateConfiguration(config, displayMetrics)
+    // Also set the JVM default locale — this doesn't affect Android resource lookups
+    // but may influence Compose internals or RevenueCat SDK formatting. Experimental.
+    Locale.setDefault(resolvedLocale)
+    Log.d(TAG, "Locale.setDefault set to $resolvedLocale (was $originalDefaultLocale)")
 
     Log.d(
             TAG,
@@ -110,6 +115,8 @@ internal fun buildFinalContext(
                 Log.d(TAG, "Restoring original AssetManager configuration (locale=$systemLocale)")
                 @Suppress("DEPRECATION")
                 activity.resources.updateConfiguration(originalConfig, displayMetrics)
+                Locale.setDefault(originalDefaultLocale)
+                Log.d(TAG, "Locale.setDefault restored to $originalDefaultLocale")
             },
     )
 }
