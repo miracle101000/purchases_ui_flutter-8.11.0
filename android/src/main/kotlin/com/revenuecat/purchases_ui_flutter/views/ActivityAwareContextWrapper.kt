@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.res.AssetManager
 import android.content.res.Resources
+import android.view.LayoutInflater
 
 internal class ActivityContextWrapper(
         private val activity: Activity,
