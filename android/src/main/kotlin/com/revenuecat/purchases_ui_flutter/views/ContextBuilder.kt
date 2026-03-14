@@ -4,14 +4,14 @@ import android.app.Activity
 import android.content.Context
 import android.content.res.Configuration
 import android.util.Log
-import android.view.ContextThemeWrapper
 import java.util.Locale
 
 private const val TAG = "RC_ContextBuilder"
 
 /**
- * Holds the localized context and a [restore] lambda that must be called when the consuming view is
- * disposed (to restore the JVM default locale).
+ * Holds the localized context and a [restore] lambda that **must** be called in the consuming
+ * view's `dispose()`. The restore reverts both the Activity's and Application's AssetManager back
+ * to their original configurations.
  */
 internal data class LocalizedContext(
         val context: Context,
@@ -19,23 +19,34 @@ internal data class LocalizedContext(
 )
 
 /**
- * Builds a themed + localised [Context] using [ContextThemeWrapper.applyOverrideConfiguration].
+ * Builds a themed + localised [Context] from [activity].
  *
- * ### Why ContextThemeWrapper instead of createConfigurationContext
+ * ### Why we prime both Activity AND Application resources
  *
- * `createConfigurationContext()` shares the Activity's `AssetManager`, which only has locale
- * resources loaded for locales that have previously been the system locale in this process run. Any
- * other locale silently falls back to English.
+ * `createConfigurationContext()` creates a new `Resources` wrapper but shares the underlying
+ * `AssetManager`. The `AssetManager` only has locale-specific resource tables loaded ("warm") for
+ * locales that have been active as the system locale at some point in this process run. Any other
+ * locale falls back silently.
  *
- * `ContextThemeWrapper.applyOverrideConfiguration()` is the approach AppCompat uses internally for
- * dark-mode and locale overrides. It constructs a fresh `Resources` instance via
- * `ResourcesManager`, bypassing the shared AssetManager limitation and correctly loading resources
- * for any locale without side effects on the Activity.
+ * Calling `updateConfiguration()` on the Activity's `Resources` primes its `AssetManager`, but
+ * Compose and RevenueCat's SDK also access resources via the Application context — which can have a
+ * separate `Resources` instance pointing to the same underlying `AssetManager`. Priming only the
+ * Activity is insufficient if any internal code path goes through
+ * `context.applicationContext.resources`.
  *
- * @param theme Optional "dark" / "light" string from Flutter. Null -> system default.
+ * Priming both guarantees the `AssetManager` has the target locale loaded regardless of which
+ * context path the SDK uses internally.
+ *
+ * ### Why restore is deferred to dispose()
+ *
+ * Compose resolves string resources lazily during recomposition, not at construction time.
+ * Restoring the `AssetManager` immediately after construction reverts it before any resource
+ * lookups actually occur. The restore must be deferred until the view is torn down via `dispose()`.
+ *
+ * @param theme Optional "dark" / "light" string from Flutter. Null → system default.
  * @param locale Optional BCP-47 language tag (e.g. "fr", "es-MX") from Flutter.
  * ```
- *               Null or unrecognised -> falls back to the current system locale.
+ *               Null or unrecognised → falls back to the current system locale.
  * ```
  */
 internal fun buildFinalContext(
@@ -54,7 +65,7 @@ internal fun buildFinalContext(
                 val normalizedTag = locale.replace("_", "-")
                 val parsed = Locale.forLanguageTag(normalizedTag)
                 if (parsed.language.isNotEmpty()) {
-                    Log.d(TAG, "Resolved locale from Flutter tag '$locale' -> $parsed")
+                    Log.d(TAG, "Resolved locale from Flutter tag '$locale' → $parsed")
                     parsed
                 } else {
                     Log.w(
@@ -68,45 +79,62 @@ internal fun buildFinalContext(
                 systemLocale
             }
 
-    // Build an override Configuration containing only the deltas we want to apply.
-    // ContextThemeWrapper merges this on top of the base context's configuration,
-    // so we only need to specify what we're changing.
-    val overrideConfig = Configuration()
+    val targetConfig =
+            Configuration(activity.resources.configuration).apply {
+                if (theme != null) {
+                    val nightMode =
+                            if (theme == "dark") Configuration.UI_MODE_NIGHT_YES
+                            else Configuration.UI_MODE_NIGHT_NO
+                    uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or nightMode
+                    Log.d(TAG, "Applied theme override: $theme (nightMode=$nightMode)")
+                } else {
+                    Log.d(TAG, "No theme override supplied, using system default")
+                }
+                setLocale(resolvedLocale)
+            }
 
-    if (theme != null) {
-        val nightMode =
-                if (theme == "dark") Configuration.UI_MODE_NIGHT_YES
-                else Configuration.UI_MODE_NIGHT_NO
-        // Mask in only the night-mode bits; leave all other uiMode bits at zero so the
-        // wrapper merges them from the base rather than overriding them.
-        overrideConfig.uiMode = nightMode or Configuration.UI_MODE_TYPE_UNDEFINED
-        Log.d(TAG, "Applied theme override: $theme (nightMode=$nightMode)")
-    } else {
-        Log.d(TAG, "No theme override supplied, using system default")
-    }
+    // Snapshot originals before mutating anything.
+    val activityResources = activity.resources
+    val appResources = activity.applicationContext.resources
+    val originalActivityConfig = Configuration(activityResources.configuration)
+    val originalAppConfig = Configuration(appResources.configuration)
+    val originalDefaultLocale = Locale.getDefault()
+    val activityDisplayMetrics = activityResources.displayMetrics
+    val appDisplayMetrics = appResources.displayMetrics
 
-    overrideConfig.setLocale(resolvedLocale)
+    // Prime both Resources/AssetManager paths so that createConfigurationContext
+    // can serve the target locale regardless of which code path the SDK uses.
+    Log.d(TAG, "Priming Activity + Application AssetManagers for locale=$resolvedLocale")
+    @Suppress("DEPRECATION")
+    activityResources.updateConfiguration(targetConfig, activityDisplayMetrics)
+    @Suppress("DEPRECATION") appResources.updateConfiguration(targetConfig, appDisplayMetrics)
 
-    // ContextThemeWrapper.applyOverrideConfiguration creates a fresh Resources/AssetManager
-    // scoped to the merged configuration — no shared-AssetManager priming needed.
-    val wrapper = ContextThemeWrapper(activity, activity.theme)
-    wrapper.applyOverrideConfiguration(overrideConfig)
+    // JVM default — influences Compose plural rules / number formatting.
+    Locale.setDefault(resolvedLocale)
+    Log.d(TAG, "Locale.setDefault → $resolvedLocale (was $originalDefaultLocale)")
+
+    val localizedContext = activity.createConfigurationContext(targetConfig)
     Log.d(
             TAG,
-            "ContextThemeWrapper created with locale=$resolvedLocale, uiMode=${overrideConfig.uiMode}"
+            "createConfigurationContext complete — locale=$resolvedLocale, uiMode=${targetConfig.uiMode}"
     )
 
-    // Locale.setDefault is JVM-wide and doesn't affect Android resource lookups, but
-    // some Compose internals (plural rules, number formatting) consult it. Restore on dispose.
-    val originalDefaultLocale = Locale.getDefault()
-    Locale.setDefault(resolvedLocale)
-    Log.d(TAG, "Locale.setDefault set to $resolvedLocale (was $originalDefaultLocale)")
-
     return LocalizedContext(
-            context = wrapper,
+            context = ActivityContextWrapper(activity, localizedContext),
             restore = {
+                Log.d(
+                        TAG,
+                        "dispose: restoring Activity + Application AssetManagers → $systemLocale"
+                )
+                @Suppress("DEPRECATION")
+                activityResources.updateConfiguration(
+                        originalActivityConfig,
+                        activityDisplayMetrics
+                )
+                @Suppress("DEPRECATION")
+                appResources.updateConfiguration(originalAppConfig, appDisplayMetrics)
                 Locale.setDefault(originalDefaultLocale)
-                Log.d(TAG, "Locale.setDefault restored to $originalDefaultLocale")
+                Log.d(TAG, "dispose: restore complete, Locale.setDefault → $originalDefaultLocale")
             },
     )
 }
