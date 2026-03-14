@@ -67,5 +67,29 @@ internal fun buildFinalContext(
             TAG,
             "Creating configuration context with locale=$resolvedLocale, uiMode=${config.uiMode}"
     )
-    return ActivityContextWrapper(activity, activity.createConfigurationContext(config))
+
+    // -----------------------------------------------------------------------
+    // AssetManager locale-priming workaround
+    //
+    // createConfigurationContext() shares the Activity's AssetManager. The
+    // AssetManager only has locale-specific resources "warm" for locales that
+    // have already been the system locale at some point in this process run.
+    // For any other locale (e.g. user picks Italian while the device is set to
+    // French) createConfigurationContext produces a context whose resource
+    // lookups silently fall back to the default (English) strings.
+    //
+    // Fix: briefly call the deprecated updateConfiguration() to force the
+    // AssetManager to initialise resources for the target locale, then
+    // immediately restore the original configuration. After this, the
+    // subsequent createConfigurationContext() call works correctly.
+    // -----------------------------------------------------------------------
+    val originalConfig = Configuration(activity.resources.configuration)
+    val displayMetrics = activity.resources.displayMetrics
+    Log.d(TAG, "Priming AssetManager for locale=$resolvedLocale")
+    @Suppress("DEPRECATION") activity.resources.updateConfiguration(config, displayMetrics)
+    val localizedContext = activity.createConfigurationContext(config)
+    Log.d(TAG, "Restoring original configuration after AssetManager priming")
+    @Suppress("DEPRECATION") activity.resources.updateConfiguration(originalConfig, displayMetrics)
+
+    return ActivityContextWrapper(activity, localizedContext)
 }
