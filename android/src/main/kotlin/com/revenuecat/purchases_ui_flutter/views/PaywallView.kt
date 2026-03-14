@@ -16,7 +16,7 @@ private const val TAG = "RC_PaywallView"
 
 internal class PaywallView(
         context: Context,
-        id: Int,
+        private val id: Int,
         messenger: BinaryMessenger,
         creationParams: Map<String?, Any?>
 ) : PlatformView, MethodCallHandler {
