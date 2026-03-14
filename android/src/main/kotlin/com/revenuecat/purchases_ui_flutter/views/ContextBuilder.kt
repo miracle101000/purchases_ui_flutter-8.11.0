@@ -9,19 +9,46 @@ import java.util.Locale
 private const val TAG = "RC_ContextBuilder"
 
 /**
- * Builds a themed + localised [Context] from [activity].
+ * Holds the localized context and a [restore] lambda that must be called when the consuming view is
+ * disposed. The restore reverts the Activity's AssetManager back to its original configuration (see
+ * [buildFinalContext] for why this is needed).
+ */
+internal data class LocalizedContext(
+        val context: Context,
+        val restore: () -> Unit,
+)
+
+/**
+ * Builds a themed + localised [Context] from [activity] and returns it paired with a
+ * [LocalizedContext.restore] lambda that the caller **must** invoke on view disposal.
  *
- * @param theme Optional "dark" / "light" string from Flutter. Null → system default.
+ * ### Why the restore lambda exists
+ *
+ * `createConfigurationContext()` does not create a new `AssetManager` — it shares the Activity's.
+ * The shared `AssetManager` only has locale-specific resources loaded for locales that have
+ * previously been active as the system locale in the current process. Any other locale falls
+ * through to the default (English) strings.
+ *
+ * The fix is to call the deprecated `updateConfiguration()` before `createConfigurationContext()`,
+ * which forces the `AssetManager` to load the target locale's resources. Crucially, this must
+ * **not** be restored immediately: Compose resolves string resources lazily during recomposition,
+ * so restoring the `AssetManager` straight after construction reverts it before any resource
+ * lookups actually occur — which is exactly the bug this workaround is addressing.
+ *
+ * Instead, the caller stores [LocalizedContext.restore] and invokes it in `dispose()`, keeping the
+ * `AssetManager` primed for the target locale for the entire lifespan of the view.
+ *
+ * @param theme Optional "dark" / "light" string from Flutter. Null -> system default.
  * @param locale Optional BCP-47 language tag (e.g. "fr", "es-MX") from Flutter.
  * ```
- *                Null or unrecognised → falls back to the current system locale.
+ *               Null or unrecognised -> falls back to the current system locale.
  * ```
  */
 internal fun buildFinalContext(
         activity: Activity,
         theme: String?,
         locale: String?,
-): Context {
+): LocalizedContext {
     val systemLocale: Locale = activity.resources.configuration.locales[0]
     Log.d(
             TAG,
@@ -34,7 +61,7 @@ internal fun buildFinalContext(
                 val parsed = Locale.forLanguageTag(normalizedTag)
 
                 if (parsed.language.isNotEmpty()) {
-                    Log.d(TAG, "Resolved locale from Flutter tag '$locale' → $parsed")
+                    Log.d(TAG, "Resolved locale from Flutter tag '$locale' -> $parsed")
                     parsed
                 } else {
                     Log.w(
@@ -50,7 +77,6 @@ internal fun buildFinalContext(
 
     val config =
             Configuration(activity.resources.configuration).apply {
-                // Apply night-mode override when a theme is requested
                 if (theme != null) {
                     val nightMode =
                             if (theme == "dark") Configuration.UI_MODE_NIGHT_YES
@@ -63,33 +89,27 @@ internal fun buildFinalContext(
                 setLocale(resolvedLocale)
             }
 
+    // Snapshot the original config so we can restore it on dispose.
+    val originalConfig = Configuration(activity.resources.configuration)
+    val displayMetrics = activity.resources.displayMetrics
+
+    // Prime the shared AssetManager for the target locale. The restore is intentionally
+    // deferred to dispose() — see the KDoc above for the full explanation.
+    Log.d(TAG, "Priming AssetManager for locale=$resolvedLocale (restore deferred to dispose)")
+    @Suppress("DEPRECATION") activity.resources.updateConfiguration(config, displayMetrics)
+
     Log.d(
             TAG,
             "Creating configuration context with locale=$resolvedLocale, uiMode=${config.uiMode}"
     )
-
-    // -----------------------------------------------------------------------
-    // AssetManager locale-priming workaround
-    //
-    // createConfigurationContext() shares the Activity's AssetManager. The
-    // AssetManager only has locale-specific resources "warm" for locales that
-    // have already been the system locale at some point in this process run.
-    // For any other locale (e.g. user picks Italian while the device is set to
-    // French) createConfigurationContext produces a context whose resource
-    // lookups silently fall back to the default (English) strings.
-    //
-    // Fix: briefly call the deprecated updateConfiguration() to force the
-    // AssetManager to initialise resources for the target locale, then
-    // immediately restore the original configuration. After this, the
-    // subsequent createConfigurationContext() call works correctly.
-    // -----------------------------------------------------------------------
-    val originalConfig = Configuration(activity.resources.configuration)
-    val displayMetrics = activity.resources.displayMetrics
-    Log.d(TAG, "Priming AssetManager for locale=$resolvedLocale")
-    @Suppress("DEPRECATION") activity.resources.updateConfiguration(config, displayMetrics)
     val localizedContext = activity.createConfigurationContext(config)
-    Log.d(TAG, "Restoring original configuration after AssetManager priming")
-    @Suppress("DEPRECATION") activity.resources.updateConfiguration(originalConfig, displayMetrics)
 
-    return ActivityContextWrapper(activity, localizedContext)
+    return LocalizedContext(
+            context = ActivityContextWrapper(activity, localizedContext),
+            restore = {
+                Log.d(TAG, "Restoring original AssetManager configuration (locale=$systemLocale)")
+                @Suppress("DEPRECATION")
+                activity.resources.updateConfiguration(originalConfig, displayMetrics)
+            },
+    )
 }

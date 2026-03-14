@@ -23,11 +23,13 @@ internal class PaywallView(
 
     private val methodChannel: MethodChannel
     private val nativePaywallView: NativePaywallView
+    private lateinit var restoreLocale: () -> Unit
 
     override fun getView(): View = nativePaywallView
 
     override fun dispose() {
-        Log.d(TAG, "dispose called for view id=$id")
+        Log.d(TAG, "dispose called for view id=$id — restoring AssetManager locale")
+        restoreLocale()
     }
 
     init {
@@ -50,7 +52,8 @@ internal class PaywallView(
 
         val activity = context as? Activity ?: error("PaywallView requires an Activity context")
 
-        val finalContext = buildFinalContext(activity, theme, locale)
+        val (finalContext, restore) = buildFinalContext(activity, theme, locale)
+        restoreLocale = restore
 
         nativePaywallView =
                 NativePaywallView(
