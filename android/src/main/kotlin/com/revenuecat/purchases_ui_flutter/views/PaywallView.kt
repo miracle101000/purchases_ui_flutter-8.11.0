@@ -53,6 +53,12 @@ internal class PaywallView(
         val activity = context as? Activity ?: error("PaywallView requires an Activity context")
 
         val (finalContext, restore) = buildFinalContext(activity, theme, locale)
+        Log.d(TAG, "finalContext locale: ${finalContext.resources.configuration.locales[0]}")
+        Log.d(TAG, "activity locale: ${activity.resources.configuration.locales[0]}")
+        Log.d(
+                TAG,
+                "application locale: ${activity.applicationContext.resources.configuration.locales[0]}"
+        )
         restoreLocale = restore
 
         nativePaywallView =
