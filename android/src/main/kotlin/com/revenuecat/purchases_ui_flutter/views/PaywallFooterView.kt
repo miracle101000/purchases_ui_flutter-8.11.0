@@ -2,70 +2,48 @@ package com.revenuecat.purchases_ui_flutter.views
 
 import android.app.Activity
 import android.content.Context
-import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
 import androidx.core.view.children
-import com.revenuecat.purchases.Purchases
 import com.revenuecat.purchases.hybridcommon.ui.PaywallListenerWrapper
 import com.revenuecat.purchases.ui.revenuecatui.views.PaywallFooterView as NativePaywallFooterView
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.platform.PlatformView
 
-private const val TAG = "RC_PaywallFooterView"
-
 internal class PaywallFooterView(
         context: Context,
-        private val id: Int,
+        id: Int,
         messenger: BinaryMessenger,
         creationParams: Map<String?, Any?>
 ) : PlatformView {
 
     private val methodChannel: MethodChannel
     private val nativePaywallFooterView: NativePaywallFooterView
-    private lateinit var restoreLocale: () -> Unit
-    private var disposed = false
 
     override fun getView(): View = nativePaywallFooterView
-
-    override fun dispose() {
-        Log.d(TAG, "dispose called for view id=$id — restoring AssetManager locale")
-        disposed = true
-        restoreLocale()
-    }
+    override fun dispose() {}
 
     init {
-        Log.d(TAG, "Initialising PaywallFooterView id=$id, params=$creationParams")
-
         methodChannel = MethodChannel(messenger, "com.revenuecat.purchasesui/PaywallFooterView/$id")
 
         val offeringIdentifier = creationParams["offeringIdentifier"] as String?
         val theme = creationParams["theme"] as String?
         // BCP-47 locale tag supplied by Flutter (e.g. "fr", "es-MX").
-        // Falls back to the system locale inside buildFinalContext when null or unrecognised.
+        // Falls back to "en" inside buildFinalContext when null or unrecognised.
         val locale = creationParams["locale"] as String?
-
-        Log.d(
-                TAG,
-                "Creation params — offeringIdentifier=$offeringIdentifier, theme=$theme, locale=$locale"
-        )
 
         val activity =
                 context as? Activity ?: error("PaywallFooterView requires an Activity context")
 
-        val (finalContext, restore) = buildFinalContext(activity, theme, locale)
-        restoreLocale = restore
+        val finalContext = buildFinalContext(activity, theme, locale)
 
         nativePaywallFooterView =
                 object :
                         NativePaywallFooterView(
                                 finalContext,
-                                dismissHandler = {
-                                    Log.d(TAG, "onDismiss triggered")
-                                    methodChannel.invokeMethod("onDismiss", null)
-                                }
+                                dismissHandler = { methodChannel.invokeMethod("onDismiss", null) }
                         ) {
                     public override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
                         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
@@ -78,7 +56,6 @@ internal class PaywallFooterView(
                         }
                         val finalWidth = maxWidth.coerceAtLeast(suggestedMinimumWidth)
                         val finalHeight = maxHeight.coerceAtLeast(suggestedMinimumHeight)
-                        Log.d(TAG, "onMeasure — finalWidth=$finalWidth, finalHeight=$finalHeight")
                         setMeasuredDimension(finalWidth, finalHeight)
                         updateHeight(finalHeight.toDouble())
                     }
@@ -87,17 +64,12 @@ internal class PaywallFooterView(
         nativePaywallFooterView.setPaywallListener(
                 object : PaywallListenerWrapper() {
                     override fun onPurchaseStarted(rcPackage: Map<String, Any?>) {
-                        Log.d(TAG, "onPurchaseStarted — package=${rcPackage["identifier"]}")
                         methodChannel.invokeMethod("onPurchaseStarted", rcPackage)
                     }
                     override fun onPurchaseCompleted(
                             customerInfo: Map<String, Any?>,
                             storeTransaction: Map<String, Any?>
                     ) {
-                        Log.d(
-                                TAG,
-                                "onPurchaseCompleted — transaction=${storeTransaction["transactionIdentifier"]}"
-                        )
                         methodChannel.invokeMethod(
                                 "onPurchaseCompleted",
                                 mapOf(
@@ -107,19 +79,15 @@ internal class PaywallFooterView(
                         )
                     }
                     override fun onPurchaseCancelled() {
-                        Log.d(TAG, "onPurchaseCancelled")
                         methodChannel.invokeMethod("onPurchaseCancelled", null)
                     }
                     override fun onPurchaseError(error: Map<String, Any?>) {
-                        Log.e(TAG, "onPurchaseError — error=$error")
                         methodChannel.invokeMethod("onPurchaseError", error)
                     }
                     override fun onRestoreCompleted(customerInfo: Map<String, Any?>) {
-                        Log.d(TAG, "onRestoreCompleted")
                         methodChannel.invokeMethod("onRestoreCompleted", customerInfo)
                     }
                     override fun onRestoreError(error: Map<String, Any?>) {
-                        Log.e(TAG, "onRestoreError — error=$error")
                         methodChannel.invokeMethod("onRestoreError", error)
                     }
                 }
@@ -131,47 +99,10 @@ internal class PaywallFooterView(
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         Gravity.BOTTOM
                 )
-
-        // Fetch offerings with the locale already set via Locale.setDefault in buildFinalContext.
-        Log.d(TAG, "Fetching fresh offerings for locale=$locale before setting offering")
-        Purchases.sharedInstance.getOfferingsWith(
-                onError = { error ->
-                    if (disposed) return@getOfferingsWith
-                    Log.e(
-                            TAG,
-                            "getOfferings error: ${error.message} — falling back to setOfferingId"
-                    )
-                    nativePaywallFooterView.setOfferingId(offeringIdentifier)
-                },
-                onSuccess = { offerings ->
-                    if (disposed) {
-                        Log.d(TAG, "getOfferings callback: view already disposed, skipping")
-                        return@getOfferingsWith
-                    }
-                    val offering =
-                            if (offeringIdentifier != null) {
-                                (offerings.all[offeringIdentifier] ?: offerings.current).also {
-                                    if (it?.identifier != offeringIdentifier) {
-                                        Log.w(
-                                                TAG,
-                                                "Offering '$offeringIdentifier' not found, using: ${it?.identifier}"
-                                        )
-                                    }
-                                }
-                            } else {
-                                offerings.current
-                            }
-                    Log.d(TAG, "getOfferings success — setting offeringId: ${offering?.identifier}")
-                    nativePaywallFooterView.setOfferingId(
-                            offering?.identifier ?: offeringIdentifier
-                    )
-                }
-        )
-        Log.d(TAG, "PaywallFooterView id=$id initialised successfully")
+        nativePaywallFooterView.setOfferingId(offeringIdentifier)
     }
 
     private fun updateHeight(newHeight: Double) {
-        Log.d(TAG, "updateHeight → $newHeight px")
         methodChannel.invokeMethod("onHeightChanged", newHeight)
     }
 }
