@@ -34,7 +34,7 @@ class PurchasesUiPaywallViewFactory: NSObject, FlutterPlatformViewFactory {
 }
 
 @available(iOS 15.0, *)
-final class ViewControllerWrapper<T: UIViewController>: UIView {
+final class PurchasesUiViewControllerWrapper<T: UIViewController>: UIView {
   private var wrappedViewController: T
   private var addedToHierarchy = false
   var userInterfaceStyle: UIUserInterfaceStyle = .unspecified
@@ -73,7 +73,7 @@ final class ViewControllerWrapper<T: UIViewController>: UIView {
 
 @available(iOS 15.0, *)
 class PurchasesUiPaywallView: NSObject, FlutterPlatformView {
-  private var _view: ViewControllerWrapper<PaywallViewController>
+  private var _view: PurchasesUiViewControllerWrapper<PaywallViewController>
   private var _paywallProxy: PaywallProxy?
   private var _methodChannel: FlutterMethodChannel
   private var _paywallViewController: PaywallViewController
@@ -91,7 +91,7 @@ class PurchasesUiPaywallView: NSObject, FlutterPlatformView {
     _paywallProxy = paywallProxy
     _paywallViewController = paywallProxy.createPaywallView()
 
-    _view = ViewControllerWrapper(viewController: _paywallViewController)
+    _view = PurchasesUiViewControllerWrapper(viewController: _paywallViewController)
 
     if let args = args as? [String: Any?] {
       if let offeringId = args["offeringIdentifier"] as? String {
